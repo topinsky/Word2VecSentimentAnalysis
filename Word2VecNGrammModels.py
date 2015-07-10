@@ -84,9 +84,6 @@ def filter_text(filename):
 
 
 def construct_word2vec(filename, model='skip-gram'):
-    """
-    :rtype : gensim.model.Word2Vec object
-    """
     texts = gensim.models.word2vec.LineSentence(filename)
     sg = 1 if model == 'skip-gram' else 0
     model = gensim.models.Word2Vec(texts, size=300, sg=sg)
