@@ -1,4 +1,5 @@
 # encoding=utf8
+__author__ = 'topinsky'
 import gzip
 import optparse
 import gensim
