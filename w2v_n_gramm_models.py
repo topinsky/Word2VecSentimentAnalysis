@@ -121,13 +121,16 @@ def main():
         raise RuntimeError("Specify the input filename, -f <filename>.")
     if options.output is None:
         raise RuntimeError("Specify the output filename, -o <filename>.")
-
+    print "Starting..."
     corpus_file_ = preprocess_text(options.corpus, options.n_gram)
+    print "Preprocessed..."
     if options.idf:
         corpus_file_ = filter_text(corpus_file_, options.verbose)
+        print "Filtered..."
     word2vec_model = construct_word2vec(corpus_file_, options.model)
+    print "W2V constructed..."
     word2vec_model.save_word2vec_format(options.output, binary=True)
-
+    print "Done."
 
 if __name__ == '__main__':
     main()
