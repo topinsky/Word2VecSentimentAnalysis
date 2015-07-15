@@ -30,6 +30,11 @@ if __name__ == '__main__':
                       help="whether the script should balance classes' distribution.")
     (options, _) = parser.parse_args()
 
+    if options.matrix_file is None:
+        raise RuntimeError("Specify the input filename with matrix, -m <filename>.")
+    if options.targets_file is None:
+        raise RuntimeError("Specify the input filename with targets, -t <filename>.")
+
     matrix_train, matrix_test,  targets_train, targets_test = construct_baseline_datasets((options.matrix_file,
                                                                                            options.targets_file),
                                                                                           split_ratio=options.split,
@@ -69,5 +74,5 @@ if __name__ == '__main__':
     print "Confusion matrix:\n%s" % confusion_matrix(expected, predicted)
 
     nn_res = predictions_and_stats(nnet, matrix_test.todense(), targets_test)
-    roc(nn_res[1],nn_res[2], nn_res[3], "Simple NN on Processed Matrix")
+    roc(nn_res[1], nn_res[2], nn_res[3], "Simple NN on Processed Matrix")
     plt.show()
