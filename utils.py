@@ -1,18 +1,66 @@
 # encoding=utf8
 __author__ = 'topinsky'
+
+import sys
+reload(sys)
+sys.setdefaultencoding('utf8')
+
 import matplotlib
 matplotlib.use('TkAgg')
-import csv
-import numpy as np
+
 import pylab as plt
 import seaborn as sns
+sns.set()
+
+import bs4
+import csv
+import json
+import gzip
+import numpy as np
+import gensim
+
 from scipy.sparse import csr_matrix
 from sklearn.metrics import precision_score, roc_curve, auc
 from sklearn.utils import resample
 from sklearn.cross_validation import train_test_split
 from sklearn.manifold import TSNE
 
-sns.set()
+
+
+
+def load_data(filename, model):
+    data = []
+    targets = []
+    with open(filename, 'r') as ifile:
+        for line in ifile:
+            data = json.loads(line.strip())
+            targets.append(data['class'])
+            vec = np.zeros(300)
+            count = 0
+            for gram in data['text']:
+                try:
+                    vec += model[gram]
+                    count += 1
+                except KeyError:
+                    continue
+            if count:
+                vec /= count
+            data.append(vec)
+    return np.array(data), np.array(targets)
+
+
+def balanced_index(targets):
+    class_index = {0: [], 1: []}
+    for i, c in enumerate(targets):
+        class_index[c].append(i)
+    minor_class = 0 if len(class_index[0]) < len(class_index[1]) else 1
+    balanced_class_index = resample(class_index[1 - minor_class],
+                                    n_samples=len(class_index[minor_class]),
+                                    replace=False,
+                                    random_state=5)
+    index_ = np.concatenate((class_index[minor_class], balanced_class_index))
+    index_.sort()
+    return index_
 
 
 def predictions_and_stats(model, test_features, test_targets):
@@ -183,6 +231,96 @@ def tsne_plot(features, targets):
             # negative
             color = 'r'
         plt.plot(reduced_vecs[i,0], reduced_vecs[i,1], marker='o', color=color, markersize=8, alpha =0.3)
+
+
+def clean_text(text):
+    punctuation = """.,?!:;(){}[]/"""
+    text = bs4.BeautifulSoup(text).get_text(separator=" ")
+    text = text.lower().replace('\n', '')
+
+    # treat punctuation as individual words
+    for c in punctuation:
+        text = text.replace(c, ' %s ' % c)
+    text = text.split()
+    return text
+
+
+def construct_n_gram(text, n_gram_value=1 ):
+    results = []
+    word_count = len(text)
+    if n_gram_value > word_count:
+        return []
+    for i in xrange(word_count):
+        if i <= word_count - n_gram_value:
+            results.append('_'.join(text[i:i+n_gram_value]))
+    return results
+
+
+def preprocess_text(filename, n_gram_value=1):
+    if filename[-3:] == '.gz':
+        data_source = gzip.open(filename, 'rb')
+        output_name = filename + ('.pp%d.gz' % n_gram_value)
+        storage = gzip.open(output_name, 'wb')
+    else:
+        data_source = open(filename, 'r')
+        output_name = filename + ('.pp%d' % n_gram_value)
+        storage = open(output_name,'w')
+    for line in data_source:
+        raw_text = json.loads(line.strip())['text']
+        text = clean_text(raw_text)
+        text_by_n_gram = construct_n_gram(text, n_gram_value)
+        storage.write(' '.join(text_by_n_gram) + '\n')
+    storage.close()
+    data_source.close()
+    return output_name
+
+
+def filter_text(filename, verbose=False):
+    texts = gensim.models.word2vec.LineSentence(filename)
+    dictionary = gensim.corpora.Dictionary(texts)
+    corpus = [dictionary.doc2bow(text) for text in texts]
+    tf_idf_model = gensim.models.TfidfModel(corpus, dictionary=dictionary, normalize=False)
+    idfs = np.array(sorted(tf_idf_model.idfs.items(), key=lambda x: x[1]))
+    if verbose:
+        plt.plot([idf[1] for idf in idfs])
+        plt.savefig("idf_cdf.png")
+    total_idf = idfs.max(axis=0)[1]
+    cum_idfs = 0
+    bad_ids = []
+    for elem in idfs:
+        cum_idfs += elem[1]
+        if cum_idfs / total_idf < 0.05:
+            bad_ids.append(elem)
+        else:
+            break
+    id2token = dict(dictionary.items())
+    if verbose:
+        print "WARNING:"
+        print "The following tokens are going to be filtered out (cut-off 0.05 * Max IDF). Max IDF:", total_idf
+        print repr([(id2token[bad_id[0]], bad_id[1])for bad_id in bad_ids])
+    dictionary.filter_tokens(map(lambda x: x[0], bad_ids))
+    filtered_tokens = set(dictionary.token2id.keys())
+    if filename[-3:] == '.gz':
+        output_name = filename[:-3] + '.fo.gz'
+        storage = gzip.open(output_name, 'wb')
+    else:
+        output_name = filename + '.fo'
+        storage = open(output_name, 'w')
+    for text in texts:
+        current_text = []
+        for token in text:
+            if token in filtered_tokens:
+                current_text.append(token)
+        storage.write(' '.join(current_text)+'\n')
+    storage.close()
+    return output_name
+
+
+def construct_word2vec(filename, model='skip-gram'):
+    texts = gensim.models.word2vec.LineSentence(filename)
+    sg = 1 if model == 'skip-gram' else 0
+    w2v = gensim.models.Word2Vec(texts, size=300, sg=sg)
+    return w2v
 
 
 if __name__ == '__main__':

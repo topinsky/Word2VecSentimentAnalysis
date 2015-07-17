@@ -2,12 +2,12 @@
 __author__ = 'topinsky'
 
 import optparse
-import numpy as np
 import pandas as pd
 from gensim.models.word2vec import Word2Vec
 from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
 from sklearn.linear_model import SGDClassifier as SGDC
+
 from utils import *
 
 
